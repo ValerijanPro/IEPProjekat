@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  database:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - 3306:3306
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+#  redis:
+#    image: redis
+#    ports:
+#      - 6379:6379
+
+
+    #ovo ispod nije neophodno, nakon kreiranja deployment.yaml fajla (zamenjen je autenticationDB container-om)
+#  authenticationDatabase:
+#    image: mysql
+#    environment:
+#      - MYSQL_ROOT_PASSWORD=root
+#    ports:
+#      - 3307:3306
+  #dodati redis
+  #dodati autentikaciju
