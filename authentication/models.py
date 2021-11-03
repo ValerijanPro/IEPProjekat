@@ -17,7 +17,7 @@ class User( database.Model ):
     password = database.Column(database.String(256), nullable=False );
     forename = database.Column(database.String(256), nullable=False );
     surname = database.Column(database.String(256), nullable=False );
-    jmbg = database.Column(database.String(256), nullable=False);
+    jmbg = database.Column(database.String(13), nullable=False);
 
     roles = database.relationship("Role", secondary=UserRole.__table__,back_populates="users");
 

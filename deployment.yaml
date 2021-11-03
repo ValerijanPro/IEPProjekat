@@ -5,14 +5,15 @@ services:
     image: mysql
     environment:
       - MYSQL_ROOT_PASSWORD=root
+
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 10s
       retries: 10
-#    volumes:
-#    - dbdata:/var/lib/mysql
-#    networks:
-#      - mynet
+    networks:
+      - databaseAuthentificationNetwork
+    volumes:
+      - dbauthorizationdataaa:/var/lib/mysql
 
   authenticationDBMigration:
     image: authenticationdbmigration
@@ -21,19 +22,109 @@ services:
     depends_on:
       authenticationDB:
         condition: service_healthy
+    networks:
+      - databaseAuthentificationNetwork
 #    networks:
 #      - mynet
   authentication:
-    image: authentication
+    image: authenticationaplikacija
     environment:
       - DATABASE_URL=authenticationDB
     depends_on:
       - authenticationDBMigration
     ports:
     - 5002:5002
+    networks:
+      - databaseAuthentificationNetwork
 #    networks:
 #      - mynet
 #volumes:
 #  dbdata:
 #networks:
 #  mynet:
+  adminDB:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_TCP_PORT=3307
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 10s
+      retries: 10
+    networks:
+      - databaseNetwork
+    volumes:
+      - dbdataaa:/var/lib/mysql
+
+  adminDBMigration:
+    image: admindbmigration
+    environment:
+      - DATABASE_URL_AUTHENTIFICATION=adminDB:3307
+      - REDIS_URL=redis
+    depends_on:
+      adminDB:
+        condition: service_healthy
+    networks:
+      - databaseNetwork
+  #    networks:
+  #      - mynet
+  adminzvanicnik:
+    image: adminzvanicnikapp
+    environment:
+      - DATABASE_URL_AUTHENTIFICATION=adminDB:3307
+      - REDIS_URL=redis
+
+    depends_on:
+      - adminDBMigration
+
+    ports:
+      - 5001:5001
+    networks:
+      - databaseNetwork
+  zvanicnik:
+    image: zvanicnikapp
+    environment:
+      - DATABASE_URL_AUTHENTIFICATION=adminDB:3307
+      - REDIS_URL=redis
+
+    depends_on:
+      - adminDBMigration
+    networks:
+      - databaseNetwork
+      - redisNetwork
+    ports:
+      - 5003:5003
+
+  deamon:
+    image: daemonimage
+    environment:
+      - DATABASE_URL_AUTHENTIFICATION=adminDB:3307
+      - REDIS_URL=redis
+    depends_on:
+      - adminzvanicnik
+    networks:
+      - databaseNetwork
+      - redisNetwork
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
+    networks:
+      - redisNetwork
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+    networks:
+      - databaseNetwork
+volumes:
+    dbauthorizationdataaa:
+    dbdataaa:
+
+
+networks:
+  redisNetwork:
+  databaseNetwork:
+  databaseAuthentificationNetwork:
+

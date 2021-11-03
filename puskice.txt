@@ -1,0 +1,16 @@
+docker swarm init
+docker node ls
+cp Users/Valja/Desktop/IEPprojekat/stack.yaml stack.yaml
+cat stack.yaml
+docker stack deploy --compose-file stack.yaml authentication_stack
+docker volume ls
+docker service ls
+
+docker overlay -> sluzi za komunikaciju u swarmu izmedju containera koji su na razlicitim hostovima
+docker volume ls -> cuva se privremeno baza na hard diskovima koji su izlistani
+
+-napravim nov folder (kao sto je admin folder itd; u application.py napravim rutu koja treba; 
+napravim nov dockerfile (kao sto je admin(+zvanicnik).dockerfile; samo folder drugaciji);
+napravim image od toga;
+dodam ga u stack.yaml (sa portom npr 5004 (sve isto kao npr aplikacija adminzvanicnik u stack.yaml, samo port 5004)
+

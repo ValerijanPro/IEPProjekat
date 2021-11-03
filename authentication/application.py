@@ -1,15 +1,34 @@
+from functools import wraps
+
 from flask import Flask,request,Response,jsonify,make_response;
+
+
 from configuration import Configuration;
 from models import database, User,UserRole,Role;
 from email.utils import parseaddr;
-from flask_jwt_extended import JWTManager, create_access_token,jwt_required, create_refresh_token,get_jwt,get_jwt_identity;
+from flask_jwt_extended import JWTManager, create_access_token,jwt_required, create_refresh_token,get_jwt,get_jwt_identity,verify_jwt_in_request;
 from sqlalchemy import and_;
 
-
+import re;
 application= Flask(__name__);
 application.config.from_object(Configuration);
 
 #helper functions
+
+def roleCheck(role):
+    def innerRole(function):
+        @wraps(function)
+        def decorator(*arguments, **keywordArguments):
+            verify_jwt_in_request();
+            claims=get_jwt();
+
+            if(("roles" in claims) and (role in claims["roles"])):
+                return function(*arguments,**keywordArguments);
+            else:
+                return jsonify(msg="Missing Authorization Header"),401;
+        return decorator;
+    return innerRole;
+
 def numberOfMissingFields(email,password,forename,surname,jmbg):
     count=0;
     if(email):
@@ -25,37 +44,24 @@ def numberOfMissingFields(email,password,forename,surname,jmbg):
     return count;
 
 def checkEmptyFields(emailEmpty,passwordEmpty,forenameEmpty,surnameEmpty,jmbgEmpty, count):
-    message="";
-    if (emailEmpty or passwordEmpty or forenameEmpty or surnameEmpty or jmbgEmpty):
-        message = "Field ";
 
-    if (emailEmpty):
-        message += "email";
-        count = count - 1;
-        if (count > 0):
-            message += ", "
-    if (passwordEmpty):
-        message += "password";
-        count = count - 1;
-        if (count > 0):
-            message += ", "
-    if (forenameEmpty):
-        message += "forename";
-        count = count - 1;
-        if (count > 0):
-            message += ", "
-    if (surnameEmpty):
-        message += "surname";
-        count = count - 1;
-        if (count > 0):
-            message += ", "
+
     if (jmbgEmpty):
-        message += "jmbg";
-    if (message != ""):
-        message += " is missing."
-    return message;
+        return "Field jmbg is missing.";
+
+    if (forenameEmpty):
+        return "Field forename is missing.";
+    if (surnameEmpty):
+        return "Field surname is missing.";
+    if (emailEmpty):
+        return "Field email is missing.";
+    if (passwordEmpty):
+        return "Field password is missing.";
+    return "";
 
 def checkJMBG(jmbg):
+    if(len(jmbg)<13):
+        return False;
     OK=True;
     dan=int(jmbg[0])*10+int(jmbg[1]);
     mesec=int(jmbg[2])*10+int(jmbg[3]);
@@ -90,13 +96,26 @@ def checkPassword(password):
 
     return val;
 
+regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+def checkEmail(email):
+    if (re.fullmatch(regex, email)):
+        return "None";
+
+    else:
+        return None;
+
+
+
 @application.route( "/register" , methods = [ "POST" ] )
 def register():
-    jmbg=request.json.get("jmbg","");
-    email=request.json.get("email","");
-    password = request.json.get("password", "");
-    forename=request.json.get("forename","");
-    surname=request.json.get("surname","");
+    try:
+        jmbg=request.json.get("jmbg","");
+        email=request.json.get("email","");
+        password = request.json.get("password", "");
+        forename=request.json.get("forename","");
+        surname=request.json.get("surname","");
+    except Exception as error:
+        return make_response(400);
 
     emailEmpty=len(email)==0;
     passwordEmpty = len(password) == 0;
@@ -121,8 +140,8 @@ def register():
         return response
 
     #provera email
-    result=parseaddr(email);
-    if(len(result[1])==0):
+    result=checkEmail(email);
+    if(not result):
         response = make_response(jsonify({"message": "Invalid email."}), 400 );
         response.headers["Content-Type"] = "application/json"
         return response
@@ -141,7 +160,7 @@ def register():
         response.headers["Content-Type"] = "application/json"
         return response
 
-    user = User(email=email, password=password, forename=forename, surname=surname, JMBG=jmbg);
+    user = User(email=email, password=password, forename=forename, surname=surname, jmbg=jmbg);
     database.session.add(user);
     database.session.commit();
 
@@ -162,27 +181,17 @@ def login():
     passwordEmpty = len(password) == 0;
     #provera praznih polja
     if (emailEmpty or passwordEmpty ):
-        count=0;
         if(emailEmpty):
-            count=count+1;
-        if(passwordEmpty):
-            count=count+1;
-        message = "Field ";
-        if (emailEmpty):
-            message += "email";
-            count = count - 1;
-            if (count > 0):
-                message += ", "
-        if (passwordEmpty):
-            message += "password";
-        message += " is missing."
+            message="Field email is missing.";
+        elif(passwordEmpty):
+            message="Field password is missing."
         response = make_response(jsonify({"message": message}), 400);
         response.headers["Content-Type"] = "application/json"
         return response
 
     # provera email
-    result = parseaddr(email);
-    if (len(result[1]) == 0):
+    result = checkEmail(email);
+    if (not result ):
         response = make_response(jsonify({"message": "Invalid email."}), 400);
         response.headers["Content-Type"] = "application/json"
         return response;
@@ -200,7 +209,7 @@ def login():
         return response
 
     additionalClamis={
-        "jmbg":user.JMBG,
+        "jmbg":user.jmbg,
         "forename":user.forename,
         "surname":user.surname,
         "roles": [str(role) for role in user.roles]
@@ -244,9 +253,12 @@ def index():
 
 @application.route("/delete",methods=["POST"])
 @jwt_required (  )
+@roleCheck(role="admin")
 def delete():
-
-    email = request.json.get("email", "");
+    try:
+       email = request.json.get("email", "");
+    except Exception:
+        return make_response(400);
 
     emailEmpty = len(email) == 0;
 
@@ -258,8 +270,8 @@ def delete():
         return response
 
     # provera email
-    result = parseaddr(email);
-    if (len(result[1]) == 0):
+    result = checkEmail(email);
+    if (not result ):
         response = make_response(jsonify({"message": "Invalid email."}), 400);
         response.headers["Content-Type"] = "application/json"
         return response;
@@ -282,9 +294,15 @@ def delete():
         response.headers["Content-Type"] = "application/json"
         return response;
 
+    UserRole.query.filter(UserRole.userId == user.id).delete();
+
+    database.session.commit();
+
     User.query.filter(User.email == email).delete();
 
     database.session.commit();
+
+
 
     return Response(status=200);
 
